@@ -172,6 +172,7 @@ func TestTestHandler_Phase5_HistoryAndReports(t *testing.T) {
 		v1.GET("/tests", handler.ListTests)
 		v1.DELETE("/tests", handler.ClearAllTests)
 		v1.GET("/tests/summary", handler.GetPerformanceSummary)
+		v1.GET("/tests/compare", handler.CompareTests)
 		v1.GET("/tests/:id", handler.GetTestByID)
 		v1.DELETE("/tests/:id", handler.DeleteTest)
 		v1.GET("/tests/:id/export", handler.ExportTestReport)
@@ -257,7 +258,15 @@ func TestTestHandler_Phase5_HistoryAndReports(t *testing.T) {
 		t.Fatalf("expected 200 for GetPerformanceSummary, got %d", w.Code)
 	}
 
-	// 3. GET /api/v1/tests/:id
+	// 3. GET /api/v1/tests/compare?ids=hist-1,hist-2
+	req, _ = http.NewRequest(http.MethodGet, "/api/v1/tests/compare?ids=hist-1,hist-2", nil)
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for CompareTests, got %d", w.Code)
+	}
+
+	// 4. GET /api/v1/tests/:id
 	req, _ = http.NewRequest(http.MethodGet, "/api/v1/tests/hist-1", nil)
 	w = httptest.NewRecorder()
 	r.ServeHTTP(w, req)

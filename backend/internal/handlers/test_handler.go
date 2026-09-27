@@ -92,6 +92,7 @@ func (h *TestHandler) ListTests(c *gin.Context) {
 
 	search := c.DefaultQuery("q", c.Query("search"))
 	status := c.Query("status")
+	method := c.Query("method")
 	sortBy := c.DefaultQuery("sort_by", "started_at")
 	order := c.DefaultQuery("order", "DESC")
 
@@ -101,6 +102,7 @@ func (h *TestHandler) ListTests(c *gin.Context) {
 	filter := database.TestRunFilter{
 		Search: search,
 		Status: status,
+		Method: method,
 		SortBy: sortBy,
 		Order:  order,
 		Limit:  limit,
@@ -123,6 +125,65 @@ func (h *TestHandler) ListTests(c *gin.Context) {
 		Tests:   tests,
 		Total:   total,
 		Summary: summary,
+	})
+}
+
+// CompareTests handles GET /api/v1/tests/compare?ids=id1,id2,id3 to return comparative benchmark metrics.
+func (h *TestHandler) CompareTests(c *gin.Context) {
+	if h.db == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Database is not connected"})
+		return
+	}
+
+	idsParam := c.Query("ids")
+	if strings.TrimSpace(idsParam) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Query parameter 'ids' is required (comma-separated list of test IDs)"})
+		return
+	}
+
+	rawIDs := strings.Split(idsParam, ",")
+	testRuns := make([]database.TestRun, 0)
+	for _, rawID := range rawIDs {
+		cleanID := strings.TrimSpace(rawID)
+		if cleanID == "" {
+			continue
+		}
+		run, err := h.db.GetTestRun(c.Request.Context(), cleanID)
+		if err == nil && run != nil {
+			testRuns = append(testRuns, *run)
+		}
+	}
+
+	if len(testRuns) == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "No matching test runs found for comparison"})
+		return
+	}
+
+	// Calculate comparative metrics if 2 or more tests provided
+	deltas := make(map[string]interface{})
+	if len(testRuns) >= 2 {
+		t1 := testRuns[0]
+		t2 := testRuns[1]
+		deltas["baseline_id"] = t1.ID
+		deltas["comparison_id"] = t2.ID
+		deltas["total_requests_diff"] = t2.TotalRequests - t1.TotalRequests
+		deltas["avg_latency_diff_ms"] = float64(int64((t2.AvgLatencyMs-t1.AvgLatencyMs)*100+0.5)) / 100.0
+		deltas["p95_latency_diff_ms"] = float64(int64((t2.P95LatencyMs-t1.P95LatencyMs)*100+0.5)) / 100.0
+		deltas["error_rate_diff"] = float64(int64((t2.ErrorRate-t1.ErrorRate)*100+0.5)) / 100.0
+
+		var rps1, rps2 float64
+		if t1.DurationSeconds > 0 {
+			rps1 = float64(t1.TotalRequests) / float64(t1.DurationSeconds)
+		}
+		if t2.DurationSeconds > 0 {
+			rps2 = float64(t2.TotalRequests) / float64(t2.DurationSeconds)
+		}
+		deltas["rps_diff"] = float64(int64((rps2-rps1)*100+0.5)) / 100.0
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"tests":      testRuns,
+		"comparison": deltas,
 	})
 }
 

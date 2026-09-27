@@ -7,6 +7,8 @@ import {
   Settings,
   AlertCircle,
   Zap,
+  BarChart3,
+  GitCompare,
 } from 'lucide-react';
 import { Header } from '../components/Header';
 import { ConfigPanel } from '../components/ConfigPanel';
@@ -27,15 +29,25 @@ import {
 } from '../services/api';
 import { HistoryView } from './HistoryView';
 import { ReportsView } from './ReportsView';
+import { AnalyticsView } from './AnalyticsView';
+import { ComparisonView } from './ComparisonView';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 
 export function Dashboard() {
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [comparisonIds, setComparisonIds] = useState([]);
   const [backendConnected, setBackendConnected] = useState(false);
   const [currentStatus, setCurrentStatus] = useState('idle');
   const [activeConfig, setActiveConfig] = useState(null);
   const [startTime, setStartTime] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
+
+  // Navigate to compare view with selected IDs
+  const handleNavigateToCompare = useCallback((ids) => {
+    setComparisonIds(ids || []);
+    setActiveTab('comparison');
+  }, []);
 
   // Handle terminal status transition from WebSocket
   const handleTerminalState = useCallback((status) => {
@@ -143,6 +155,27 @@ export function Dashboard() {
           >
             <History size={18} />
             <span>Test History</span>
+          </button>
+
+          <button
+            className={`nav-item ${activeTab === 'analytics' ? 'active' : ''}`}
+            onClick={() => setActiveTab('analytics')}
+          >
+            <BarChart3 size={18} />
+            <span>Analytics</span>
+          </button>
+
+          <button
+            className={`nav-item ${activeTab === 'comparison' ? 'active' : ''}`}
+            onClick={() => setActiveTab('comparison')}
+          >
+            <GitCompare size={18} />
+            <span>Compare Tests</span>
+            {comparisonIds.length > 0 && (
+              <span className="nav-badge" style={{ backgroundColor: 'rgba(56, 189, 248, 0.2)', color: '#38bdf8' }}>
+                {comparisonIds.length}
+              </span>
+            )}
           </button>
 
           <button
@@ -278,10 +311,35 @@ export function Dashboard() {
           )}
 
           {/* Phase 5 Test History View */}
-          {activeTab === 'history' && <HistoryView />}
+          {activeTab === 'history' && (
+            <ErrorBoundary>
+              <HistoryView onCompare={handleNavigateToCompare} />
+            </ErrorBoundary>
+          )}
+
+          {/* Phase 6 Advanced Analytics View */}
+          {activeTab === 'analytics' && (
+            <ErrorBoundary>
+              <AnalyticsView />
+            </ErrorBoundary>
+          )}
+
+          {/* Phase 6 Test Comparison View */}
+          {activeTab === 'comparison' && (
+            <ErrorBoundary>
+              <ComparisonView
+                preselectedIds={comparisonIds}
+                onBackToHistory={() => setActiveTab('history')}
+              />
+            </ErrorBoundary>
+          )}
 
           {/* Phase 5 Reports View */}
-          {activeTab === 'reports' && <ReportsView />}
+          {activeTab === 'reports' && (
+            <ErrorBoundary>
+              <ReportsView />
+            </ErrorBoundary>
+          )}
 
           {/* Settings Tab */}
           {activeTab === 'settings' && (

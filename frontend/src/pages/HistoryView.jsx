@@ -18,11 +18,12 @@ import {
   Clock,
   Gauge,
   SlidersHorizontal,
+  Scale,
 } from 'lucide-react';
 import { fetchTestHistory, deleteTest, clearAllTests, getExportReportUrl } from '../services/api';
 import { TestDetailModal } from '../components/TestDetailModal';
 
-export function HistoryView() {
+export function HistoryView({ onNavigateToComparison }) {
   const [tests, setTests] = useState([]);
   const [summary, setSummary] = useState(null);
   const [totalCount, setTotalCount] = useState(0);
@@ -32,8 +33,12 @@ export function HistoryView() {
   // Filters and sorting
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [methodFilter, setMethodFilter] = useState('all');
   const [sortBy, setSortBy] = useState('started_at');
   const [sortOrder, setSortOrder] = useState('DESC');
+
+  // Multi-select for comparison
+  const [checkedIds, setCheckedIds] = useState([]);
 
   // Selected test for detail modal
   const [selectedTest, setSelectedTest] = useState(null);
@@ -45,6 +50,7 @@ export function HistoryView() {
       const data = await fetchTestHistory({
         search: search.trim(),
         status: statusFilter,
+        method: methodFilter,
         sortBy,
         order: sortOrder,
         limit: 100,
@@ -58,7 +64,7 @@ export function HistoryView() {
     } finally {
       setIsLoading(false);
     }
-  }, [search, statusFilter, sortBy, sortOrder]);
+  }, [search, statusFilter, methodFilter, sortBy, sortOrder]);
 
   useEffect(() => {
     loadHistory();
@@ -67,6 +73,7 @@ export function HistoryView() {
   const handleDelete = async (id) => {
     try {
       await deleteTest(id);
+      setCheckedIds(checkedIds.filter((item) => item !== id));
       if (selectedTest?.id === id) {
         setSelectedTest(null);
       }
@@ -80,11 +87,31 @@ export function HistoryView() {
     if (window.confirm('Are you sure you want to permanently clear ALL test history? This action cannot be undone.')) {
       try {
         await clearAllTests();
+        setCheckedIds([]);
         setSelectedTest(null);
         loadHistory();
       } catch (err) {
         alert(`Clear all error: ${err.message}`);
       }
+    }
+  };
+
+  const handleToggleCheck = (id, e) => {
+    e.stopPropagation();
+    if (checkedIds.includes(id)) {
+      setCheckedIds(checkedIds.filter((item) => item !== id));
+    } else {
+      if (checkedIds.length < 4) {
+        setCheckedIds([...checkedIds, id]);
+      } else {
+        alert('You can select up to 4 tests for comparison.');
+      }
+    }
+  };
+
+  const handleCompareClick = () => {
+    if (onNavigateToComparison && checkedIds.length >= 2) {
+      onNavigateToComparison(checkedIds);
     }
   };
 
@@ -173,6 +200,22 @@ export function HistoryView() {
             ))}
           </div>
 
+          {/* Method Filter */}
+          <div className="sort-controls">
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Method:</span>
+            <select
+              className="sort-select"
+              value={methodFilter}
+              onChange={(e) => setMethodFilter(e.target.value)}
+            >
+              <option value="all">All Methods</option>
+              <option value="GET">GET</option>
+              <option value="POST">POST</option>
+              <option value="PUT">PUT</option>
+              <option value="DELETE">DELETE</option>
+            </select>
+          </div>
+
           {/* Sort Selector */}
           <div className="sort-controls">
             <SlidersHorizontal size={14} color="#94a3b8" />
@@ -188,13 +231,26 @@ export function HistoryView() {
               <option value="started_at-DESC">Date (Newest First)</option>
               <option value="started_at-ASC">Date (Oldest First)</option>
               <option value="total_requests-DESC">Requests (High to Low)</option>
+              <option value="duration_seconds-DESC">Duration (Longest First)</option>
+              <option value="duration_seconds-ASC">Duration (Shortest First)</option>
               <option value="avg_latency_ms-ASC">Latency (Lowest First)</option>
               <option value="error_rate-ASC">Error Rate (Lowest First)</option>
+              <option value="error_rate-DESC">Error Rate (Highest First)</option>
             </select>
           </div>
 
           {/* Actions */}
           <div className="toolbar-actions">
+            {checkedIds.length >= 2 && onNavigateToComparison && (
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={handleCompareClick}
+                style={{ background: 'linear-gradient(90deg, #0284c7, #38bdf8)', color: '#090d16', fontWeight: 700 }}
+              >
+                <Scale size={14} />
+                <span>Compare Selected ({checkedIds.length})</span>
+              </button>
+            )}
             <button className="btn-icon" onClick={loadHistory} title="Refresh test history">
               <RefreshCw size={16} />
             </button>
@@ -215,6 +271,11 @@ export function HistoryView() {
             <History size={18} color="#38bdf8" />
             <h2 className="card-title">Test Run History ({totalCount})</h2>
           </div>
+          {checkedIds.length > 0 && (
+            <span style={{ fontSize: '0.8rem', color: '#38bdf8' }}>
+              {checkedIds.length} test{checkedIds.length > 1 ? 's' : ''} selected for comparison
+            </span>
+          )}
         </div>
 
         {error && (
@@ -231,7 +292,7 @@ export function HistoryView() {
             <History size={36} color="#64748b" style={{ marginBottom: '0.75rem' }} />
             <h3 style={{ fontSize: '1rem', color: 'var(--text-secondary)' }}>No Test Runs Found</h3>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-              {search || statusFilter !== 'all'
+              {search || statusFilter !== 'all' || methodFilter !== 'all'
                 ? 'Try adjusting your search query or filter criteria.'
                 : 'Run a load test from the Dashboard to record benchmark results here.'}
             </p>
@@ -241,6 +302,7 @@ export function HistoryView() {
             <table className="data-table">
               <thead>
                 <tr>
+                  <th style={{ width: 40 }}>Compare</th>
                   <th>Status</th>
                   <th>Test Name & Endpoint</th>
                   <th>Config</th>
@@ -257,8 +319,24 @@ export function HistoryView() {
                   const passPct = run.total_requests > 0
                     ? ((run.successful_requests / run.total_requests) * 100).toFixed(1)
                     : '100.0';
+                  const isChecked = checkedIds.includes(run.id);
+
                   return (
-                    <tr key={run.id} className="history-row" onClick={() => setSelectedTest(run)}>
+                    <tr
+                      key={run.id}
+                      className="history-row"
+                      style={{ background: isChecked ? 'rgba(56, 189, 248, 0.08)' : undefined }}
+                      onClick={() => setSelectedTest(run)}
+                    >
+                      <td onClick={(e) => e.stopPropagation()} style={{ textAlign: 'center' }}>
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => handleToggleCheck(run.id, e)}
+                          title="Select for comparison"
+                          style={{ cursor: 'pointer', accentColor: '#38bdf8' }}
+                        />
+                      </td>
                       <td>{getStatusBadge(run.status)}</td>
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -309,7 +387,15 @@ export function HistoryView() {
                             className="btn btn-secondary btn-sm"
                             title="Download JSON report"
                           >
-                            <FileJson size={13} />
+                            <FileJson size={13} color="#38bdf8" />
+                          </a>
+                          <a
+                            href={getExportReportUrl(run.id, 'markdown')}
+                            download={`report-${run.id}.md`}
+                            className="btn btn-secondary btn-sm"
+                            title="Download Markdown report"
+                          >
+                            <FileText size={13} color="#f59e0b" />
                           </a>
                           <button
                             className="btn btn-danger btn-sm"

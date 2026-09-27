@@ -34,10 +34,11 @@ type HealthStatus struct {
 	Database  string    `json:"database"`
 }
 
-// TestRunFilter defines search, status filter, sorting, and pagination parameters.
+// TestRunFilter defines search, status filter, method filter, sorting, and pagination parameters.
 type TestRunFilter struct {
 	Search string `json:"search"`
 	Status string `json:"status"` // "completed", "stopped", "failed", or "" (all)
+	Method string `json:"method"` // "GET", "POST", "PUT", "DELETE", or "" (all)
 	SortBy string `json:"sort_by"` // "started_at", "total_requests", "avg_latency_ms", "error_rate", "duration_seconds"
 	Order  string `json:"order"`   // "ASC", "DESC"
 	Limit  int    `json:"limit"`

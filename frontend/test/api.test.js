@@ -17,4 +17,10 @@ describe('Frontend API Service', () => {
     const url = getExportReportUrl('test-789', 'markdown');
     assert.ok(url.includes('/tests/test-789/export?format=markdown'));
   });
+
+  it('should support default export format as json', () => {
+    const url = getExportReportUrl('test-default');
+    assert.ok(url.includes('/tests/test-default/export?format=json'));
+  });
 });
+

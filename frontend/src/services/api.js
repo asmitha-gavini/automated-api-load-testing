@@ -84,6 +84,7 @@ export async function fetchTestHistory(params = {}) {
     const query = new URLSearchParams();
     if (params.search) query.set('q', params.search);
     if (params.status && params.status !== 'all') query.set('status', params.status);
+    if (params.method && params.method !== 'all') query.set('method', params.method);
     if (params.sortBy) query.set('sort_by', params.sortBy);
     if (params.order) query.set('order', params.order);
     if (params.limit) query.set('limit', params.limit);
@@ -96,6 +97,19 @@ export async function fetchTestHistory(params = {}) {
     return await res.json();
   } catch (err) {
     throw new Error(err.message || 'Failed to fetch test history');
+  }
+}
+
+export async function compareTests(ids = []) {
+  try {
+    const idsParam = Array.isArray(ids) ? ids.join(',') : ids;
+    const res = await fetch(`${API_BASE}/tests/compare?ids=${encodeURIComponent(idsParam)}`, {
+      headers: { 'Accept': 'application/json' },
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    throw new Error(err.message || 'Failed to compare test runs');
   }
 }
 

@@ -86,6 +86,7 @@ func main() {
 		v1.GET("/tests/status", testHandler.GetStatus)
 		v1.GET("/tests/metrics", testHandler.GetMetrics)
 		v1.POST("/tests/stop", testHandler.StopTest)
+		v1.GET("/tests/compare", testHandler.CompareTests)
 		v1.GET("/tests/:id", testHandler.GetTestByID)
 		v1.DELETE("/tests/:id", testHandler.DeleteTest)
 		v1.GET("/tests/:id/export", testHandler.ExportTestReport)

@@ -222,6 +222,11 @@ func (db *DB) ListTestRunsFiltered(ctx context.Context, filter TestRunFilter) ([
 		args = append(args, strings.ToLower(strings.TrimSpace(filter.Status)))
 	}
 
+	if strings.TrimSpace(filter.Method) != "" && strings.ToLower(filter.Method) != "all" {
+		whereClauses = append(whereClauses, "UPPER(method) = ?")
+		args = append(args, strings.ToUpper(strings.TrimSpace(filter.Method)))
+	}
+
 	whereSQL := ""
 	if len(whereClauses) > 0 {
 		whereSQL = " WHERE " + strings.Join(whereClauses, " AND ")

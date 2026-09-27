@@ -16,6 +16,16 @@ import {
   Layers,
   Calendar,
 } from 'lucide-react';
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  Cell,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+} from 'recharts';
 import { getExportReportUrl } from '../services/api';
 
 export function TestDetailModal({ test, onClose, onDelete }) {
@@ -152,6 +162,36 @@ export function TestDetailModal({ test, onClose, onDelete }) {
             <Gauge size={16} color="#f59e0b" style={{ display: 'inline', marginRight: '6px', verticalAlign: '-2px' }} />
             Latency Percentiles (SLA Breakdown)
           </h3>
+
+          {/* Mini Percentiles Bar Chart */}
+          <div style={{ height: 160, marginBottom: '1rem', background: 'rgba(15, 23, 42, 0.4)', borderRadius: 'var(--radius-md)', padding: '0.5rem' }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={[
+                  { tier: 'P50 (Median)', latency: test.p50_latency_ms || 0 },
+                  { tier: 'P90 (90th)', latency: test.p90_latency_ms || 0 },
+                  { tier: 'P95 (SLA)', latency: test.p95_latency_ms || 0 },
+                  { tier: 'P99 (Tail)', latency: test.p99_latency_ms || 0 },
+                ]}
+                margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(51, 65, 85, 0.25)" />
+                <XAxis dataKey="tier" stroke="#64748b" tick={{ fontSize: 10 }} />
+                <YAxis stroke="#64748b" tick={{ fontSize: 10 }} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '8px', fontSize: '11px' }}
+                  formatter={(val) => [`${Number(val).toFixed(2)} ms`, 'Latency']}
+                />
+                <Bar dataKey="latency" radius={[4, 4, 0, 0]} isAnimationActive={false}>
+                  <Cell fill="#38bdf8" />
+                  <Cell fill="#818cf8" />
+                  <Cell fill="#f59e0b" />
+                  <Cell fill="#ec4899" />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
           <div className="percentiles-table-wrapper">
             <table className="data-table">
               <thead>
