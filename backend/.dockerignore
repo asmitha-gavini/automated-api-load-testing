@@ -1,0 +1,13 @@
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.git
+.gitignore
+.vscode
+.idea
+bin/
+tmp/
+scratch/
+Dockerfile
+.dockerignore

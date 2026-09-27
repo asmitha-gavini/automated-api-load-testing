@@ -279,7 +279,15 @@ func handleOrders(w http.ResponseWriter, r *http.Request) {
 
 	// For POST: Decode optional body or fallback to default order
 	var req OrderRequest
-	_ = json.NewDecoder(r.Body).Decode(&req)
+	if r.Body != nil {
+		if err := json.NewDecoder(r.Body).Decode(&req); err == nil {
+			if req.Quantity <= 0 && (req.UserID > 0 || req.ProductID > 0) {
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).Encode(map[string]string{"error": "Quantity must be greater than zero"})
+				return
+			}
+		}
+	}
 
 	userID := req.UserID
 	if userID <= 0 {

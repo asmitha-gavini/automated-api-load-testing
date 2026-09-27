@@ -1,0 +1,75 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: loadpulse-backend
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - ENV=production
+      - DB_PATH=/data/loadpulse.db
+      - ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://localhost:80
+      - DEMO_API_HOST=demo-api:8081
+    volumes:
+      - loadpulse-data:/data
+    depends_on:
+      demo-api:
+        condition: service_healthy
+    networks:
+      - loadpulse-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  demo-api:
+    build:
+      context: ./demo-api
+      dockerfile: Dockerfile
+    container_name: loadpulse-demo-api
+    ports:
+      - "8081:8081"
+    environment:
+      - PORT=8081
+    networks:
+      - loadpulse-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 3s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: loadpulse-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - loadpulse-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 3s
+
+volumes:
+  loadpulse-data:
+    driver: local
+
+networks:
+  loadpulse-network:
+    driver: bridge

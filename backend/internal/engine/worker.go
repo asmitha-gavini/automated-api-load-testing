@@ -7,6 +7,8 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -39,6 +41,14 @@ func createHTTPClient(timeoutMs int) *http.Client {
 
 // buildTargetURL constructs the final URL including query parameters.
 func buildTargetURL(rawURL string, queryParams map[string]string) string {
+	if demoHost := os.Getenv("DEMO_API_HOST"); demoHost != "" {
+		if strings.Contains(rawURL, "localhost:8081") {
+			rawURL = strings.Replace(rawURL, "localhost:8081", demoHost, 1)
+		} else if strings.Contains(rawURL, "127.0.0.1:8081") {
+			rawURL = strings.Replace(rawURL, "127.0.0.1:8081", demoHost, 1)
+		}
+	}
+
 	if len(queryParams) == 0 {
 		return rawURL
 	}
