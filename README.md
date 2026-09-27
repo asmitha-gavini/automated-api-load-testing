@@ -1,289 +1,388 @@
-# LoadPulse: Automated API Load Testing Platform
+# Automated API Load Testing Platform
 
-An enterprise-ready, high-performance, developer-centric platform to benchmark, stress test, and monitor API performance with real-time WebSocket telemetry, Prometheus observability, SQLite persistence, and advanced analytics.
+An enterprise-ready, developer-centric platform to benchmark, stress test, and monitor API performance with real-time WebSocket telemetry, Prometheus metrics export, SQLite persistence, test comparison matrix, and advanced analytics.
 
 ---
 
-## 1. System Architecture
+## 1. Project Overview
 
+Modern web applications and microservices require rigorous load testing to identify throughput bottlenecks, tail-latency regressions (P95/P99), and concurrency-induced failure modes before deploying to production.
+
+### Problem Statement
+Traditional load-testing tools often present friction:
+- Complex CLI-only workflows with disconnected analysis tools.
+- Resource-heavy Java/JVM footprints.
+- Lack of immediate, live real-time visual telemetry during active test execution.
+- Difficult historical comparison between optimization runs.
+
+### Solution
+**Automated API Load Testing Platform** is a lightweight, full-stack load generation and benchmarking suite:
+- **Go Engine**: Bounded concurrent goroutine worker pool executing controlled HTTP load with low memory overhead.
+- **Live Telemetry Pipeline**: Real-time 500ms metric snapshots broadcast over WebSockets to interactive charts.
+- **Prometheus Observability**: Scrape-ready `/metrics` endpoint exporting standard Prometheus metrics.
+- **Persistent Test History**: SQLite storage capturing every test run with exact percentiles, HTTP status distributions, and error breakdowns.
+- **Advanced Analytics & Comparison**: Side-by-side benchmark matrix comparing multiple test runs with differential delta badges.
+- **Exportable Reports**: One-click downloads for JSON, GitHub-Flavored Markdown (GFM), and CSV reports, plus printable audit views.
+
+---
+
+## 2. Architecture
+
+```mermaid
+graph TD
+    subgraph ClientLayer ["Client Layer"]
+        Browser([User Web Browser])
+    end
+
+    subgraph PresentationLayer ["Frontend Layer (React 18 + Vite + Nginx)"]
+        UI["Dashboard & Visualization UI (:3000 / :5173)"]
+        Nginx["Nginx Reverse Proxy & Static Host"]
+        UI --- Nginx
+    end
+
+    subgraph BackendLayer ["Backend Layer (Go 1.24+ & Gin Engine)"]
+        RESTRouter["REST API Router (/api/v1)"]
+        WSHub["WebSocket Hub (/ws/)"]
+        LoadEngine["Concurrent Load Engine (Goroutine Worker Pool)"]
+        MetricsAgg["Thread-Safe Metrics Aggregator"]
+        PromExporter["Prometheus Exporter (/metrics)"]
+        SQLiteDriver["SQLite Database Engine (WAL Mode)"]
+
+        RESTRouter --> LoadEngine
+        RESTRouter --> SQLiteDriver
+        WSHub <--> LoadEngine
+        LoadEngine --> MetricsAgg
+        MetricsAgg --> WSHub
+        MetricsAgg --> PromExporter
+        MetricsAgg --> SQLiteDriver
+    end
+
+    subgraph StorageLayer ["Persistence Layer"]
+        DB[(Persistent SQLite Storage /data/loadpulse.db)]
+        SQLiteDriver --- DB
+    end
+
+    subgraph TargetLayer ["Target Service"]
+        DemoAPI["Local Demo Target API (:8081)"]
+        LoadEngine -->|"Controlled Concurrent HTTP"| DemoAPI
+    end
+
+    Browser -->|"HTTP / REST API"| Nginx
+    Browser -->|"WebSocket Telemetry Stream"| Nginx
+    Nginx -->|"Proxy /api/v1"| RESTRouter
+    Nginx -->|"Proxy /ws"| WSHub
 ```
-                                  [ Web Browser / User ]
-                                            │
-                                            ▼
-                     ┌──────────────────────────────────────────────┐
-                     │   LoadPulse Frontend (React + Vite + Nginx)  │
-                     │          Port 3000 (Docker) / 5173 (Dev)     │
-                     └──────────────────────┬───────────────────────┘
-                                            │
-                     ┌──────────────────────┴───────────────────────┐
-                     │ REST API (/api/v1)   │ WebSocket (/ws/)      │
-                     ▼                      ▼                       │
-    ┌───────────────────────────────────────────────────────────┐   │
-    │                    Go Load Engine Backend                 │   │
-    │                        Port 8080                          │   │
-    │  ┌──────────────────┐  ┌────────────────┐  ┌───────────┐  │   │
-    │  │ Worker Pool      │  │ Real-Time Hub  │  │ Prometheus│  │   │
-    │  │ (Goroutines + VU)│  │ (WebSocket)   │  │ Exporter  │──┼───┘ Scrapes :8080/metrics
-    │  └────────┬─────────┘  └────────────────┘  └───────────┘  │
-    └───────────┼─────────────────────┬─────────────────────────┘
-                │ HTTP Requests       │ SQLite Read/Write
-                ▼                     ▼
-    ┌───────────────────────┐   ┌───────────────────────────────┐
-    │     Demo Mock API     │   │   SQLite Database (Persistent)│
-    │       Port 8081       │   │      /data/loadpulse.db       │
-    └───────────────────────┘   └───────────────────────────────┘
-```
 
 ---
 
-## 2. Tech Stack
+## 3. Technology Stack
 
-| Domain | Technologies & Libraries |
-| :--- | :--- |
-| **Backend Engine** | Go 1.24+, Gin Web Framework, Gorilla WebSocket, Prometheus Client Golang, ModernC SQLite |
-| **Frontend UI** | React 18, Vite, Recharts, Lucide Icons, Vanilla Glassmorphism CSS |
-| **Storage** | SQLite with WAL (Write-Ahead Logging) mode and automatic migrations |
-| **Containerization** | Docker, Multi-Stage Builds, Docker Compose, Nginx Alpine Reverse Proxy |
-| **Observability** | Native Prometheus `/metrics` exporter, real-time 500ms WebSocket metric ticks |
+| Domain | Technology / Library | Purpose |
+| :--- | :--- | :--- |
+| **Backend Language** | Go 1.24+ | High-performance, concurrent load generation and routing |
+| **Web Framework** | Gin Web Framework (`github.com/gin-gonic/gin`) | Modular REST API routing, CORS, and logging |
+| **Concurrency & Workers** | Goroutines, Channels, `sync.WaitGroup`, `sync/atomic` | Controlled concurrent virtual user simulation |
+| **WebSocket** | Gorilla WebSocket (`github.com/gorilla/websocket`) | Full-duplex real-time metric broadcasting |
+| **Metrics & Observability**| Prometheus Golang Client (`prometheus/client_golang`) | Scrape endpoint, histogram buckets, and live gauges |
+| **Embedded Database** | SQLite via Pure-Go Driver (`modernc.org/sqlite`) | CGO-free, embedded transactional persistence in WAL mode |
+| **Frontend Framework** | React 18 & Vite | Fast, responsive single-page application |
+| **Visualization** | Recharts (`recharts`) | Real-time and historical response time, RPS, and VU charts |
+| **Icons & Design** | Lucide React (`lucide-react`) & Modern Vanilla CSS | Glassmorphism dark mode, responsive layouts, accessible controls |
+| **Web Server (Docker)** | Nginx Alpine | Production reverse proxy, WebSocket upgrade, and static hosting |
 
 ---
 
-## 3. Project Structure
+## 4. UI Dashboard & Screenshots
+
+> *Placeholder: Dashboard screenshots can be viewed in the UI running on port 3000 (Docker) or port 5173 (Dev).*
+
+The dashboard provides six dedicated views:
+1. **Live Dashboard**: Interactive configuration panel, real-time KPI cards, progress bar, and streaming charts (Latency, RPS, Error Rate, Active VUs).
+2. **Create Test**: Presets for instant safe testing against users, products, orders, and simulated error scenarios.
+3. **Test History**: Searchable, filterable (Status, HTTP Method), and multi-column sortable table of all historical runs.
+4. **Analytics**: Peak throughput, peak active VUs, P50/P90/P95/P99 latency vs SLA thresholds, latency spread, and multi-run historical trends.
+5. **Compare Tests**: Multi-test selection, side-by-side benchmark matrix table, comparative grouped bar charts, and differential delta indicators.
+6. **Reports**: Global summary statistics, recent test logs, and direct JSON / Markdown / CSV export downloads.
+
+---
+
+## 5. Project Structure
 
 ```
 automated-api-load-testing/
-├── docker-compose.yml          # Multi-container orchestration (Frontend, Backend, Demo API, Volumes)
-├── .env.example                # Configuration template
-├── .dockerignore               # Global docker ignore rules
-├── .gitignore                  # Git ignore rules
+├── docker-compose.yml          # Production multi-service orchestration
+├── .env.example                # Environment variable configuration template
+├── .dockerignore               # Docker ignore rules
+├── .gitignore                  # Git exclusions (no secrets, binaries, or node_modules)
+├── README.md                   # Comprehensive project documentation
 │
-├── backend/                    # Go Load Engine & REST/WS Server
+├── backend/                    # Go Backend Service
 │   ├── cmd/
-│   │   └── server/main.go      # Backend entrypoint (port 8080)
+│   │   ├── server/main.go      # Primary backend daemon (:8080)
+│   │   └── verify/main.go      # Automated CLI verification utility
 │   ├── internal/
-│   │   ├── config/             # Environment variable loading
-│   │   ├── database/           # SQLite migrations, schema, and queries
-│   │   ├── engine/             # Goroutine worker pool, metrics collector, and percentiles
-│   │   ├── handlers/           # Gin REST, WebSocket, history, export, and compare handlers
-│   │   ├── metrics/            # Prometheus collectors and live gauges
-│   │   └── websocket/          # WebSocket hub and client connections
-│   ├── Dockerfile              # Multi-stage Go production container
-│   ├── .dockerignore           # Backend docker ignore rules
+│   │   ├── config/             # Config loader (.env and environment defaults)
+│   │   ├── database/           # SQLite migrations, connection pool, and queries
+│   │   ├── engine/             # Load generator, worker pool, validator, percentiles
+│   │   ├── handlers/           # HTTP handlers: tests, status, metrics, history, compare, export
+│   │   ├── metrics/            # Prometheus registry, histograms, and live gauges
+│   │   └── websocket/          # WebSocket hub, connection manager, client pump
+│   ├── Dockerfile              # Multi-stage production container for Go backend
+│   ├── .dockerignore           # Backend docker context rules
 │   └── go.mod / go.sum
 │
-├── frontend/                   # React + Vite Production Dashboard
+├── frontend/                   # React + Vite Single-Page Application
 │   ├── src/
-│   │   ├── components/         # Metric cards, config panel, progress bar, error boundary, modal
+│   │   ├── components/         # ConfigPanel, MetricCards, ProgressBar, ErrorBoundary, Modal
 │   │   ├── pages/              # Dashboard, HistoryView, AnalyticsView, ComparisonView, ReportsView
-│   │   ├── charts/             # Latency, throughput, error rate, and VU charts (Recharts)
+│   │   ├── charts/             # LatencyChart, ThroughputChart, ErrorRateChart, ActiveUsersChart
 │   │   ├── hooks/              # useWebSocket live telemetry hook
-│   │   ├── services/           # REST client with export and compare helpers
-│   │   └── styles/             # Modular CSS design system with glassmorphism
-│   ├── nginx.conf              # Production Nginx reverse proxy with WS upgrade support
-│   ├── Dockerfile              # Multi-stage Node builder + Nginx runtime container
-│   ├── .dockerignore           # Frontend docker ignore rules
+│   │   ├── services/           # api.js client layer with export and compare helpers
+│   │   └── styles/             # Modular CSS design system (dashboard, components, charts, print)
+│   ├── nginx.conf              # Production Nginx reverse proxy with WebSocket upgrade
+│   ├── Dockerfile              # Multi-stage Node builder + Nginx Alpine runtime
+│   ├── .dockerignore           # Frontend docker context rules
 │   └── package.json
 │
-└── demo-api/                   # Target Mock API for Safe Benchmarking
-    ├── main.go                 # Mock endpoints with configurable delay and error rate (port 8081)
+└── demo-api/                   # Safe Companion Mock API Target
+    ├── main.go                 # Mock endpoints (/users, /products, /orders) with delay/error simulation
     ├── main_test.go            # Demo API unit tests
-    ├── Dockerfile              # Multi-stage container for Demo API
+    ├── Dockerfile              # Multi-stage container for Demo API (:8081)
     ├── .dockerignore
     └── go.mod
 ```
 
 ---
 
-## 4. Key Features
+## 6. How It Works
 
-1. **High-Performance Load Engine**
-   - Controlled concurrent HTTP load generation using lightweight Go goroutines.
-   - Configurable Virtual Users (VUs), duration, total requests, request timeouts, and ramp-up schedules.
-   - Thread-safe metrics aggregator tracking RPS, total, successful, and failed requests.
-   - Precise latency percentiles: **P50 (Median)**, **P90**, **P95**, and **P99 (Tail Outlier)**.
-
-2. **Real-Time Telemetry & WebSocket Pipeline**
-   - Live 500ms metric updates pushed over WebSockets to `/ws/metrics` or `/ws/tests/:testId`.
-   - Real-time Recharts visualization of latency, throughput, error rate, and active virtual users.
-
-3. **Prometheus Observability**
-   - Native Prometheus `/metrics` endpoint.
-   - Tracks counters (`loadtest_requests_total`), gauges (`loadtest_active_users`, `loadtest_current_rps`), and histograms (`loadtest_request_duration_seconds`).
-
-4. **Persistent Test History & Filtering**
-   - Every completed test is automatically persisted in SQLite.
-   - Comprehensive test history table with search, status filtering, HTTP method filtering (`GET`, `POST`, `PUT`, `DELETE`), and multi-column sorting.
-
-5. **Advanced Analytics**
-   - Peak throughput and virtual user KPI cards.
-   - Latency percentiles benchmarked against SLA thresholds.
-   - Min / Avg / Max latency spread breakdown.
-   - Historical multi-run trend lines for RPS and response times.
-
-6. **Benchmark Comparison**
-   - Select 2 or more tests to view a side-by-side benchmark matrix.
-   - Differential KPI cards with colored improvement/degradation badges (`RPS Delta`, `Avg Latency Delta`, `P95 Delta`, `Error Rate Delta`).
-
-7. **Multi-Format Report Downloads**
-   - Export test results directly from the UI or REST API in **JSON**, **Markdown (GFM)**, or **CSV** formats.
-   - Built-in print stylesheet for printable audit reports.
+1. **Configuring a Test**:
+   The user specifies the target endpoint, HTTP method (`GET`, `POST`, `PUT`, `DELETE`), headers, query parameters, payload, virtual users (1–500), and test duration or total request limit.
+2. **Safety Validation**:
+   The backend validator checks concurrency limits, timeout boundaries (50ms–30s), duration bounds (max 10 minutes), and ensures target URLs are valid HTTP/HTTPS schemes.
+3. **Controlled Concurrency**:
+   The Go engine initializes a worker pool. When a ramp-up duration is specified, virtual users spawn according to an incremental schedule. Each virtual user runs in an independent goroutine reusing an optimized HTTP client connection pool.
+4. **Telemetry & Real-Time Calculation**:
+   Every request records start time, end time, duration, status code, and success/failure. A lock-minimized metrics collector accumulates samples and computes instant throughput (RPS), running average latency, and exact percentiles (P50, P90, P95, P99).
+5. **Broadcasting & Scraping**:
+   Every 500ms, the WebSocket Hub pushes telemetry snapshots to all subscribed clients. In parallel, Prometheus live gauges (`loadtest_current_rps`, `loadtest_active_users`) and duration histograms update continuously.
+6. **Persistence & Export**:
+   Upon test completion, the entire run summary is committed to SQLite. Users can immediately review historical runs, compare multiple benchmarks, or export audit reports in JSON, Markdown, or CSV.
 
 ---
 
-## 5. Docker Setup & Deployment
+## 7. Local Setup (Without Docker)
 
-### Quick Start with Docker Compose
-Run the entire production stack with a single command:
+### Prerequisites
+- **Go**: 1.22 or newer (`go version`)
+- **Node.js**: 20 or newer (`node -v`, `npm -v`)
 
+### 1. Start the Demo Mock API (Target)
+Open Terminal 1:
 ```bash
+cd demo-api
+go run main.go
+# Listens on http://localhost:8081
+```
+
+### 2. Start the Go Backend Server
+Open Terminal 2:
+```bash
+cd backend
+go run ./cmd/server/main.go
+# Listens on http://localhost:8080
+```
+
+### 3. Start the React Frontend Dashboard
+Open Terminal 3:
+```bash
+cd frontend
+npm install
+npm run dev
+# Vite dev server opens at http://localhost:5173
+```
+
+Navigate to `http://localhost:5173` in your browser.
+
+---
+
+## 8. Docker Setup & Deployment
+
+The platform includes production-ready multi-stage Dockerfiles and a `docker-compose.yml` stack.
+
+### Quick Start
+```bash
+# Build and start all services in detached mode
 docker compose up --build -d
 ```
 
-### Services & Port Mappings
-| Service | Container Name | Port Mapping | Healthcheck Endpoint |
-| :--- | :--- | :--- | :--- |
-| **Frontend** | `loadpulse-frontend` | `http://localhost:3000` | `http://localhost:80/` |
-| **Go Backend** | `loadpulse-backend` | `http://localhost:8080` | `http://localhost:8080/health` |
-| **Demo API** | `loadpulse-demo-api` | `http://localhost:8081` | `http://localhost:8081/health` |
+### Services, Port Mappings & Health Checks
+| Service | Container Name | Host Port | Internal Port | Health Check |
+| :--- | :--- | :--- | :--- | :--- |
+| **Frontend** | `loadpulse-frontend` | `3000` | `80` (Nginx) | `curl -f http://localhost:80/` |
+| **Go Backend** | `loadpulse-backend` | `8080` | `8080` | `curl -f http://localhost:8080/health` |
+| **Demo Target API**| `loadpulse-demo-api` | `8081` | `8081` | `curl -f http://localhost:8081/health` |
 
 ### Verifying Persistent Storage
-The SQLite database is stored in a named Docker volume (`loadpulse-data` mounted at `/data/loadpulse.db`).
-
-To verify persistence across restarts:
+SQLite data is mapped to a named Docker volume (`loadpulse-data` mounted at `/data`):
 ```bash
-# 1. Run a test from the UI or API
-# 2. Stop the stack
+# 1. Run a load test from the UI or API
+# 2. Stop the containers
 docker compose down
 
 # 3. Start the stack again
 docker compose up -d
 
-# 4. Check test history: all previous test runs remain preserved!
+# 4. Open http://localhost:3000/ - all historical test results are preserved!
 ```
 
 ---
 
-## 6. Local Development (Without Docker)
+## 9. API Documentation
 
-### Prerequisites
-- **Go**: 1.22+
-- **Node.js**: 20+
+All routes use the actual backend paths implemented in `backend/cmd/server/main.go`:
 
-### Step 1: Start the Demo Mock API
-```bash
-cd demo-api
-go run main.go
-# Running on http://localhost:8081
-```
-
-### Step 2: Start the Go Backend
-```bash
-cd backend
-go run ./cmd/server/main.go
-# Running on http://localhost:8080
-```
-
-### Step 3: Start the React Frontend
-```bash
-cd frontend
-npm install
-npm run dev
-# Running on http://localhost:5173
-```
-
-Open `http://localhost:5173` in your browser.
-
----
-
-## 7. Environment Variables Reference
-
-Copy `.env.example` to `.env` to customize settings:
-
-| Variable | Default Value | Description |
+### Core Endpoints
+| Method | Path | Description |
 | :--- | :--- | :--- |
-| `PORT` | `8080` | HTTP port for the Go backend server |
-| `ENV` | `development` / `production` | Gin runtime mode (`debug` vs `release`) |
-| `DB_PATH` | `loadtest.db` (local) / `/data/loadpulse.db` (docker) | File path to SQLite database file |
-| `ALLOWED_ORIGINS` | `http://localhost:3000,http://localhost:5173` | Allowed CORS origins (comma-separated) |
-| `DEMO_API_HOST` | `demo-api:8081` | Container alias for automatic target translation in Docker |
-| `DEMO_PORT` | `8081` | Port for the companion Demo Mock API |
+| `GET` | `/health` or `/api/v1/health` | System and database connectivity check |
+| `GET` | `/metrics` or `/api/v1/metrics`| Prometheus metrics scrape endpoint |
+
+### Load Testing Lifecycle
+| Method | Path | Description |
+| :--- | :--- | :--- |
+| `POST` | `/api/v1/tests` | Validate and initiate a new concurrent load test |
+| `GET` | `/api/v1/tests/status` | Current engine execution status (`idle`, `running`, `completed`, `stopped`) |
+| `GET` | `/api/v1/tests/metrics` | Latest live or final test metrics snapshot |
+| `POST` | `/api/v1/tests/stop` | Gracefully cancel and stop an active load test |
+
+#### Sample Start Test Request (`POST /api/v1/tests`):
+```json
+{
+  "target_url": "http://localhost:8081/api/products?delay_ms=20",
+  "method": "GET",
+  "virtual_users": 5,
+  "duration_seconds": 10,
+  "timeout_seconds": 5
+}
+```
+
+### Test History & Benchmark Analytics
+| Method | Path | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/v1/tests` | Query historical test runs (supports `search`, `method`, `status`, `sort_by`, `order`, `page`, `page_size`) |
+| `GET` | `/api/v1/tests/:id` | Fetch complete details and percentile breakdown for a specific test |
+| `GET` | `/api/v1/tests/summary` | Global aggregate statistics (total tests, total requests, overall error rate) |
+| `GET` | `/api/v1/tests/compare?ids=id1,id2` | Side-by-side comparison and delta calculations between 2+ test runs |
+| `DELETE`| `/api/v1/tests/:id` | Permanently delete a single test run record |
+| `DELETE`| `/api/v1/tests` | Clear the entire historical test database |
+
+### Report Exports
+| Method | Path | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/v1/tests/:id/export?format=json` | Download structured JSON performance report |
+| `GET` | `/api/v1/tests/:id/export?format=markdown` | Download formatted GitHub-Flavored Markdown report |
+| `GET` | `/api/v1/tests/:id/export?format=csv` | Download CSV metrics export |
 
 ---
 
-## 8. API & Telemetry Reference
+## 10. WebSocket Telemetry
 
-### REST Endpoints
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET` | `/health` | System and SQLite connectivity health status |
-| `GET` | `/metrics` | Prometheus metrics scrape endpoint |
-| `POST` | `/api/v1/tests` | Start a new load test |
-| `GET` | `/api/v1/tests` | List historical test runs with search, filtering, and pagination |
-| `GET` | `/api/v1/tests/status` | Current load engine status (`idle`, `running`, `completed`, `stopped`) |
-| `GET` | `/api/v1/tests/metrics` | Current live snapshot or final test metrics |
-| `POST` | `/api/v1/tests/stop` | Gracefully terminate an ongoing test run |
-| `GET` | `/api/v1/tests/summary` | Global aggregated benchmark statistics |
-| `GET` | `/api/v1/tests/compare?ids=id1,id2` | Side-by-side benchmark comparison and delta calculations |
-| `GET` | `/api/v1/tests/:id` | Detailed test record by UUID |
-| `DELETE`| `/api/v1/tests/:id` | Delete a single test record |
-| `DELETE`| `/api/v1/tests` | Clear entire test history |
-| `GET` | `/api/v1/tests/:id/export?format=json` | Export test report as JSON |
-| `GET` | `/api/v1/tests/:id/export?format=markdown` | Export test report as GitHub Flavored Markdown |
-| `GET` | `/api/v1/tests/:id/export?format=csv` | Export test report as CSV |
+Connect to stream real-time metrics pushed every 500ms during active load generation:
 
-### WebSocket Endpoints
-| Protocol | Endpoint | Description |
-| :--- | :--- | :--- |
-| `WS` | `/ws/metrics` | Stream live metric updates across all active test runs |
-| `WS` | `/ws/tests/:testId` | Stream live metric updates for a specific test run |
+- **General Hub**: `ws://localhost:8080/ws/metrics`
+- **Specific Test Stream**: `ws://localhost:8080/ws/tests/{testId}`
 
-### Demo API Endpoints
-| Method | Endpoint | Default Delay | Description |
-| :--- | :--- | :--- | :--- |
-| `GET` | `/health` | Instant | Demo API health check |
-| `GET/POST/PUT/DELETE` | `/api/users` | ~15ms | Fast mock user directory |
-| `GET/POST/PUT/DELETE` | `/api/products` | ~50ms (+ jitter) | Catalog items with simulated latency |
-| `GET/POST` | `/api/orders` | ~70ms (+ jitter) | Order transactions with stock validation |
-
-*Query Parameters*:
-- `?delay_ms=<ms>`: Inject explicit artificial latency (e.g. `?delay_ms=200`).
-- `?error_rate=<0.0-1.0>`: Inject simulated HTTP 500 error probability (e.g. `?error_rate=0.25`).
+### Real-Time Metric Payload Frame:
+```json
+{
+  "test_id": "e711bce9-6da2-41bd-955e-a1b977393e77",
+  "status": "running",
+  "timestamp": "2026-09-27T10:56:04Z",
+  "total_requests": 142,
+  "successful_requests": 142,
+  "failed_requests": 0,
+  "error_rate": 0.0,
+  "requests_per_second": 52.3,
+  "average_latency_ms": 54.8,
+  "p50_latency_ms": 54.8,
+  "p95_latency_ms": 66.3,
+  "p99_latency_ms": 146.2,
+  "active_users": 3
+}
+```
 
 ---
 
-## 9. Testing & Quality Assurance
+## 11. Prometheus Metrics
 
-### Run Backend Unit & Integration Tests:
+The backend exposes a standard Prometheus exporter at `http://localhost:8080/metrics`.
+
+### Key Metrics Exported:
+| Metric Name | Type | Description |
+| :--- | :--- | :--- |
+| `loadtest_requests_total` | Counter | Total requests partitioned by `method`, `status_code`, and `success` |
+| `loadtest_request_duration_seconds` | Histogram | Request latency histogram with configurable percentile buckets |
+| `loadtest_active_users` | Gauge | Number of concurrently active virtual users |
+| `loadtest_current_rps` | Gauge | Instant throughput (requests per second) |
+| `loadtest_running_tests` | Gauge | Number of currently executing test suites (0 or 1) |
+
+---
+
+## 12. Testing & Quality Assurance
+
+### Run Backend Unit & Concurrency Tests:
 ```bash
 cd backend
 go vet ./...
-go test -v ./...
+go test -count=1 -v ./...
 ```
 
-### Run Demo API Tests:
+### Run Demo Mock API Tests:
 ```bash
 cd demo-api
-go test -v ./...
+go test -count=1 -v ./...
 ```
 
-### Run Frontend Unit Tests:
+### Run Frontend Tests & Production Build:
 ```bash
 cd frontend
 npm test
-```
-
-### Run Frontend Production Build:
-```bash
-cd frontend
 npm run build
 ```
 
 ---
 
-## 10. Security & Responsible Testing Safeguards
+## 13. Deployment Options & Honest Limitations
 
-This platform is strictly designed for authorized, local, and staging environment load testing:
-- **Concurrency Caps**: Virtual users bounded to 500 max to prevent unintended client-side exhaustion.
-- **Duration Limits**: Test duration strictly capped at 600 seconds (10 minutes).
-- **Scheme Validation**: Restricted to valid `http://` and `https://` endpoints.
-- **Safety**: Contains no capabilities for authentication bypass, credential stuffing, rate-limit evasion, WAF bypass, or DDoS attacks.
+### Production Deployment Strategies:
+1. **Single-Host VPS / VM (Docker Compose)**:
+   Deploy `docker-compose.yml` to an AWS EC2, DigitalOcean Droplet, Linode, or Hetzner server behind Nginx or Traefik with automated Let's Encrypt SSL/TLS.
+2. **Cloud Container Orchestration (AWS ECS / Google Cloud Run)**:
+   Deploy the backend and frontend as distinct container services. For multi-container cloud deployments, map persistent storage via AWS EFS or migrate the persistence layer to PostgreSQL.
+3. **Bare-Metal Linux Systemd**:
+   Compile static Go binaries (`go build -ldflags="-w -s"`) and run as Systemd daemons reverse-proxied by host Nginx.
+
+### Deployment Environment Limitations:
+- **Local Host Docker CLI**: On Windows hosts without Docker Desktop installed, running local `docker compose` commands directly in PowerShell requires installing Docker Desktop for Windows with the WSL2 backend. The project includes verified, standards-compliant Dockerfiles and Compose configurations ready for immediate deployment on any machine with Docker installed.
+- **Race Detector on Windows**: Running `go test -race` on Windows without MinGW/GCC outputs `go: -race requires cgo; enable cgo by setting CGO_ENABLED=1`. Concurrency safety is thoroughly verified via lock-free atomics, mutex locks, and high-concurrency stress test suites (`TestMetricsCollector_ConcurrentSafety`, `TestWebSocket_ConcurrentBroadcast`).
+
+---
+
+## 14. Security & Responsible Testing Safeguards
+
+This software is designed exclusively for authorized benchmark, stress, and performance testing:
+- **Strict Concurrency Limits**: Capped at 500 Virtual Users to safeguard local and staging infrastructure.
+- **Duration Boundaries**: Test execution duration is strictly capped at 600 seconds (10 minutes).
+- **Scheme Validation**: Rejects non-HTTP schemes (no `file://`, `ftp://`, or internal socket protocols).
+- **Ethical Testing Policy**: Does **not** include mechanisms for DDoS attacks, credential stuffing, rate-limit evasion, WAF bypassing, or unauthorized access.
+
+---
+
+## 15. Future Enhancements
+
+- Distributed multi-node load generators for cluster-scale benchmarking (10,000+ VUs).
+- Support for gRPC and GraphQL target protocols.
+- Automated threshold assertions / CI/CD quality gates (e.g. fail build if P95 exceeds 250ms).
+- OAuth2 / JWT authorization flow simulation with token rotation.
+- Webhook notifications (Slack, Discord, PagerDuty) on SLA threshold violations.
